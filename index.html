@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Car Detector</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
+    <style>
+        body {
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            background: #222;
+            color: white;
+            font-family: Arial, sans-serif;
+        }
+        #camera-container {
+            position: relative;
+            width: 300px;
+            height: 300px;
+        }
+        #camera-view, #video {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            background: gray;
+        }
+        #video {
+            display: none;
+            object-fit: cover;
+        }
+        #you {
+            width: 50px;
+            height: 50px;
+            background: black;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            line-height: 50px;
+            color: white;
+            font-size: 14px;
+        }
+        #map {
+            width: 300px;
+            height: 300px;
+            background: #333;
+            margin-top: 20px;
+            position: relative;
+            transform-origin: center;
+        }
+        .car {
+            width: 50px;
+            height: 25px;
+            background: white;
+            color: black;
+            position: absolute;
+            text-align: center;
+            line-height: 25px;
+            font-size: 12px;
+        }
+        .bounding-box {
+            position: absolute;
+            border: 2px solid red;
+            pointer-events: none;
+        }
+        button {
+            margin-top: 10px;
+            padding: 10px;
+            border: none;
+            background: #08f;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Car Detector</h1>
+    
+    <div id="camera-container">
+        <div id="camera-view">
+            <div id="you">YOU</div>
+        </div>
+        <video id="video" autoplay playsinline></video>
+    </div>
+
+    <button onclick="toggleCamera()">Toggle Camera</button>
+
+    <div id="map"></div>
+
+    <script>
+        let video = document.getElementById("video");
+        let cameraView = document.getElementById("camera-view");
+        let isCameraVisible = false;
+
+        async function setupCamera() {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+            video.srcObject = stream;
+        }
+
+        async function detectCars() {
+            const model = await cocoSsd.load();
+            const canvas = document.createElement("canvas");
+            const ctx = canvas.getContext("2d");
+            document.body.appendChild(canvas);
+            canvas.width = 300;
+            canvas.height = 300;
+            canvas.style.display = "none";
+
+            function updateMap(predictions) {
+                const map = document.getElementById("map");
+                map.innerHTML = "";
+                document.querySelectorAll(".bounding-box").forEach(box => box.remove());
+
+                predictions.forEach(pred => {
+                    if (pred.class === "car") {
+                        // Create red bounding box in camera view
+                        const box = document.createElement("div");
+                        box.className = "bounding-box";
+                        box.style.left = `${pred.bbox[0]}px`;
+                        box.style.top = `${pred.bbox[1]}px`;
+                        box.style.width = `${pred.bbox[2]}px`;
+                        box.style.height = `${pred.bbox[3]}px`;
+                        cameraView.appendChild(box);
+
+                        // Create car on map
+                        const carDiv = document.createElement("div");
+                        carDiv.className = "car";
+                        carDiv.innerText = "Car";
+
+                        let mapX = (pred.bbox[0] / canvas.width) * 300;
+                        let mapY = (pred.bbox[1] / canvas.height) * 300;
+
+                        carDiv.style.left = `${mapX}px`;
+                        carDiv.style.top = `${mapY}px`;
+
+                        map.appendChild(carDiv);
+                    }
+                });
+            }
+
+            async function detectFrame() {
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                const predictions = await model.detect(canvas);
+                updateMap(predictions);
+                requestAnimationFrame(detectFrame);
+            }
+
+            detectFrame();
+        }
+
+        function toggleCamera() {
+            isCameraVisible = !isCameraVisible;
+            video.style.display = isCameraVisible ? "block" : "none";
+            cameraView.style.display = isCameraVisible ? "none" : "block";
+        }
+
+        window.addEventListener("deviceorientation", event => {
+            let rotation = event.alpha || 0;
+            document.getElementById("map").style.transform = `rotate(${rotation}deg)`;
+        });
+
+        async function main() {
+            await setupCamera();
+            await detectCars();
+        }
+
+        main();
+    </script>
+</body>
+</html>
